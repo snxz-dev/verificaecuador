@@ -243,7 +243,7 @@ const year = new Date().getFullYear();
         if (matches.length) {
           matchesHtml = matches.map((m) => `
             <div class="match">
-              ${m.image ? `<img class="match-img" src="${esc(m.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
+              ${m.image ? `<img class="match-img" src="${esc(apiUrl + "/image?url=" + encodeURIComponent(m.image))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
               <h3>${esc(m.claim)}</h3>
               <div class="meta">
                 <span class="verdict">${esc(m.verdict)}</span>

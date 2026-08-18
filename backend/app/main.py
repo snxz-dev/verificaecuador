@@ -2,15 +2,17 @@
 
 import asyncio
 import logging
+from urllib.parse import urlparse
 
+import httpx
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from .db import SessionLocal, search_fact_checks
 from .detector import classify
-from .sources import search_live_sources
+from .sources import USER_AGENT, search_live_sources
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -34,6 +36,45 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# Dominios permitidos para el proxy de imágenes (evita SSRF: nada de URLs arbitrarias)
+ALLOWED_IMAGE_HOSTS = (
+    "ecuadorchequea.com",
+    "primeraplana.com.ec",
+    "gstatic.com",
+    "googleusercontent.com",
+    "wp.com",
+)
+
+
+@app.get("/image")
+async def proxy_image(url: str = Query(...)):
+    """Sirve imágenes de las fuentes verificadas desde nuestro dominio.
+
+    La web las carga a través de aquí para que los bloqueadores de
+    rastreadores (ej: Brave Shields) no impidan verlas por ser cross-site.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise HTTPException(status_code=400, detail="URL inválida")
+    if not any(parsed.hostname == h or parsed.hostname.endswith("." + h)
+               for h in ALLOWED_IMAGE_HOSTS):
+        raise HTTPException(status_code=400, detail="Dominio no permitido")
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": USER_AGENT})
+            resp.raise_for_status()
+            content = resp.content
+            content_type = resp.headers.get("content-type", "image/jpeg")
+    except Exception as e:
+        logger.warning("Proxy de imagen falló: %s", e)
+        raise HTTPException(status_code=502, detail="No se pudo obtener la imagen")
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.post("/verify")
