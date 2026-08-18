@@ -2,6 +2,10 @@
 
 Usa RapidOCR (ONNX, sin servicios externos). El modelo se carga la primera
 vez que se usa (inicialización perezosa) para no frenar el arranque de la API.
+
+Optimizado para el plan gratuito de Render (512 MB RAM): onnxruntime se limita
+a 1 hilo (por defecto usa todos los cores del host y agota la memoria) y los
+lotes de reconocimiento se reducen.
 """
 
 import logging
@@ -11,13 +15,56 @@ logger = logging.getLogger(__name__)
 _ocr = None
 
 
+def _patch_onnxruntime_threads() -> None:
+    """Fuerza onnxruntime a 1 hilo por sesión para reducir el consumo de RAM.
+
+    RapidOCR crea sesiones con SessionOptions() por defecto, que usa todos los
+    cores del host → thread pools enormes × 3 modelos → >512 MB (mata el
+    proceso en el plan gratis de Render). Parcheamos la creación de sesiones.
+    """
+    try:
+        from rapidocr_onnxruntime import utils as rapidocr_utils
+        import onnxruntime as ort
+
+        original = rapidocr_utils.InferenceSession
+
+        def limited_session(*args, **kwargs):
+            so = ort.SessionOptions()
+            so.log_severity_level = 4
+            so.enable_cpu_mem_arena = False
+            so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            so.intra_op_num_threads = 1
+            so.inter_op_num_threads = 1
+            kwargs["sess_options"] = so
+            return original(*args, **kwargs)
+
+        rapidocr_utils.InferenceSession = limited_session
+    except Exception as e:
+        logger.warning("No se pudo limitar hilos de onnxruntime: %s", e)
+
+
 def _get_ocr():
     global _ocr
     if _ocr is None:
         from rapidocr_onnxruntime import RapidOCR
 
-        _ocr = RapidOCR()
-        logger.info("Modelo OCR cargado")
+        _patch_onnxruntime_threads()
+        import cv2
+
+        cv2.setNumThreads(1)  # menos pools de hilos de OpenCV
+        # model_path="" deja que rapidocr use los modelos por defecto
+        _ocr = RapidOCR(
+            use_angle_cls=False,  # capturas normalmente verticales: ahorra un modelo
+            det_model_path="",
+            det_limit_side_len=480,
+            det_max_candidates=500,
+            det_use_dilation=False,
+            rec_model_path="",
+            rec_batch_num=1,
+            cls_model_path="",
+            cls_batch_num=1,
+        )
+        logger.info("Modelo OCR cargado (memoria optimizada)")
     return _ocr
 
 
