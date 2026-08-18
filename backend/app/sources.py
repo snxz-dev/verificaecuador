@@ -69,16 +69,25 @@ def _query_words(query: str, max_words: int = 6) -> list:
 def _to_wp_match(post: dict, source: str) -> dict:
     """Convierte un post de WordPress al formato que usa el bot y la web."""
     title = post["title"]["rendered"]
+    media = post.get("_embedded", {}).get("wp:featuredmedia") or []
+    image = media[0].get("source_url", "") if media else ""
     return {
         "claim": title,
         "verdict": _extract_verdict(title),
         "source": source,
         "url": post["link"],
         "explanation": _clean_html(post.get("content", {}).get("rendered", "")),
+        "image": image,
         "theme": "",
         "date": post.get("date", ""),
         "live": True,
     }
+
+
+def _first_image(html: str) -> str:
+    """Extrae la primera URL de imagen de un HTML."""
+    m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', html or "")
+    return m.group(1) if m else ""
 
 
 async def _search_wordpress(api_url: str, query: str, source: str, limit: int,
@@ -90,7 +99,8 @@ async def _search_wordpress(api_url: str, query: str, source: str, limit: int,
     params = {
         "search": " ".join(words),
         "per_page": limit,
-        "_fields": "id,link,title,date,content",
+        # _embed trae la imagen destacada; _fields la cortaría, así que no se usa
+        "_embed": "",
     }
     if categories:
         params["categories"] = categories
@@ -162,12 +172,14 @@ async def _search_google_factcheck(query: str, limit: int) -> list:
                 rating = review[3] or "Verificación"
                 review_title = review[8] or ""
                 ts = review[2] or 0
+                image = entry[1] if len(entry) > 1 and isinstance(entry[1], str) else ""
                 results.append({
                     "claim": text,
                     "verdict": str(rating).capitalize(),
                     "source": publisher,
                     "url": url,
                     "explanation": review_title,
+                    "image": image,
                     "theme": "",
                     "date": datetime.fromtimestamp(ts, timezone.utc).isoformat() if ts else "",
                     "live": True,
@@ -193,13 +205,15 @@ async def _search_rss(feed_url: str, query: str, source: str, limit: int) -> lis
         logger.warning("RSS %s falló: %s", source, e)
         return []
 
+    content_ns = "{http://purl.org/rss/1.0/modules/content/}"
     results = []
     for item in root.iter("item"):
         if len(results) >= limit:
             break
         title = (item.findtext("title") or "").strip()
         link = (item.findtext("link") or "").strip()
-        desc = _clean_html(item.findtext("description") or "", 300)
+        content_html = item.findtext(content_ns + "encoded") or item.findtext("description") or ""
+        desc = _clean_html(content_html, 300)
         haystack = f"{title} {desc}".lower()
         if not any(w in haystack for w in words):
             continue
@@ -211,6 +225,7 @@ async def _search_rss(feed_url: str, query: str, source: str, limit: int) -> lis
             "source": source,
             "url": link,
             "explanation": desc,
+            "image": _first_image(content_html),
             "theme": "",
             "date": item.findtext("pubDate") or "",
             "live": True,
