@@ -6,3 +6,18 @@ psycopg2-binary==2.9.10
 python-dotenv==1.0.1
 pydantic==2.10.4
 httpx==0.28.1
+python-multipart==0.0.20
+
+# --- Verificación por imagen (OCR) ---
+# rapidocr-onnxruntime se instala aparte con --no-deps (ver Dockerfile/render.yaml)
+# para evitar que pip arrastre opencv-python con GUI (rompe en imágenes slim).
+opencv-python-headless==5.0.0.93
+onnxruntime==1.29.0
+numpy==2.5.2
+pyclipper==1.4.0
+shapely==2.1.2
+six==1.17.0
+Pillow==12.3.0
+PyYAML==6.0.2
+tqdm==4.67.1
+requests==2.32.3

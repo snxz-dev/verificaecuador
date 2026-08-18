@@ -6,12 +6,13 @@ from urllib.parse import urlparse
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
 from .db import SessionLocal, search_fact_checks
 from .detector import classify
+from .ocr import extract_text
 from .sources import USER_AGENT, search_live_sources
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -77,13 +78,8 @@ async def proxy_image(url: str = Query(...)):
     )
 
 
-@app.post("/verify")
-async def verify(body: dict):
-    """Endpoint para verificar un texto (lo usa la app Flutter)."""
-    text = body.get("text", "").strip()
-    if not text:
-        return JSONResponse({"error": "texto vacío"}, status_code=400)
-
+async def run_verification(text: str) -> dict:
+    """Clasifica un texto y busca verificaciones (BD + fuentes en vivo)."""
     classification = classify(text)
     db = SessionLocal()
     try:
@@ -96,6 +92,35 @@ async def verify(body: dict):
     matches += [m for m in live if m["url"] not in seen]
 
     return {"classification": classification, "matches": matches, "live_sources": True}
+
+
+@app.post("/verify")
+async def verify(body: dict):
+    """Verifica un texto (lo usa la web y el bot)."""
+    text = body.get("text", "").strip()
+    if not text:
+        return JSONResponse({"error": "texto vacío"}, status_code=400)
+    return await run_verification(text)
+
+
+@app.post("/verify-image")
+async def verify_image(image: UploadFile = File(...)):
+    """Verifica una imagen: extrae el texto con OCR y lo verifica."""
+    data = await image.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Imagen vacía")
+
+    text = extract_text(data)
+    text = " ".join(text.split())
+    if len(text) < 5:
+        raise HTTPException(
+            status_code=422,
+            detail="No se pudo leer texto claro en la imagen",
+        )
+
+    result = await run_verification(text)
+    result["ocr_text"] = text
+    return result
 
 
 async def startup() -> None:

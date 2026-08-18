@@ -6,7 +6,7 @@ services:
     name: verificaecuador-api
     runtime: python
     rootDir: backend
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && pip install --no-deps rapidocr-onnxruntime==1.2.3
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
@@ -20,7 +20,7 @@ services:
     name: verificaecuador-bot
     runtime: python
     rootDir: backend
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && pip install --no-deps rapidocr-onnxruntime==1.2.3
     startCommand: python -m app.bot
     envVars:
       - key: PYTHON_VERSION

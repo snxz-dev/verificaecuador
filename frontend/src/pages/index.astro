@@ -102,6 +102,51 @@ const year = new Date().getFullYear();
       .btn:disabled { opacity: 0.6; cursor: wait; }
       .btn:hover:not(:disabled) { filter: brightness(1.06); }
 
+      .mode-switch { display: flex; gap: 8px; margin-bottom: 14px; }
+      .mode-btn {
+        flex: 1;
+        padding: 9px;
+        border-radius: 10px;
+        cursor: pointer;
+        background: var(--card-2);
+        border: 1px solid var(--border);
+        color: var(--muted);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .mode-btn.active { border-color: var(--yellow); color: var(--text); }
+      .mode-btn:hover { border-color: var(--yellow); }
+
+      .drop-zone {
+        border: 2px dashed var(--border);
+        border-radius: 10px;
+        padding: 26px 16px;
+        color: var(--muted);
+        font-size: 14px;
+        cursor: pointer;
+        text-align: center;
+      }
+      .drop-zone:hover { border-color: var(--yellow); color: var(--text); }
+      .drop-zone small { display: block; margin-top: 4px; }
+      #image-preview {
+        max-width: 100%;
+        max-height: 220px;
+        border-radius: 10px;
+        margin-top: 12px;
+        border: 1px solid var(--border);
+      }
+      .ocr-note {
+        margin: 0 0 14px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: var(--card-2);
+        border: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 13.5px;
+      }
+      .ocr-note strong { color: var(--text); }
+
       /* Resultados */
       #results { margin-top: 22px; display: none; }
       #results.show { display: block; animation: fade 0.25s ease; }
@@ -185,14 +230,27 @@ const year = new Date().getFullYear();
       </section>
 
       <form id="verify-form" class="card">
-        <label for="text" style="font-size:13px;color:var(--muted)">Texto o afirmación a verificar</label>
-        <textarea
-          id="text"
-          name="text"
-          maxlength="2000"
-          placeholder="Ej: se anularon las elecciones de noviembre, es urgente reenviar"
-          required
-        ></textarea>
+        <div class="mode-switch" role="tablist">
+          <button type="button" class="mode-btn active" data-mode="text" id="mode-text-btn">📝 Texto</button>
+          <button type="button" class="mode-btn" data-mode="image" id="mode-image-btn">🖼️ Imagen</button>
+        </div>
+
+        <div id="text-mode">
+          <label for="text" style="font-size:13px;color:var(--muted)">Texto o afirmación a verificar</label>
+          <textarea
+            id="text"
+            name="text"
+            maxlength="2000"
+            placeholder="Ej: se anularon las elecciones de noviembre, es urgente reenviar"
+          ></textarea>
+        </div>
+
+        <div id="image-mode" hidden>
+          <input type="file" id="image-file" accept="image/*" hidden />
+          <div class="drop-zone" id="drop-zone">🖼️ Haz clic para elegir una imagen<small>o arrástrala aquí / pégala con Ctrl+V</small></div>
+          <img id="image-preview" alt="Vista previa" hidden />
+        </div>
+
         <button type="submit" class="btn" id="submit-btn">Verificar 🔎</button>
       </form>
 
@@ -216,6 +274,54 @@ const year = new Date().getFullYear();
       const loading = document.getElementById("loading");
       const errorBox = document.getElementById("error");
       const results = document.getElementById("results");
+      const modeTextBtn = document.getElementById("mode-text-btn");
+      const modeImageBtn = document.getElementById("mode-image-btn");
+      const textMode = document.getElementById("text-mode");
+      const imageMode = document.getElementById("image-mode");
+      const imageFileInput = document.getElementById("image-file");
+      const dropZone = document.getElementById("drop-zone");
+      const imagePreview = document.getElementById("image-preview");
+
+      let currentMode = "text";
+      let selectedFile = null;
+
+      function setMode(mode) {
+        currentMode = mode;
+        textMode.hidden = mode !== "text";
+        imageMode.hidden = mode !== "image";
+        modeTextBtn.classList.toggle("active", mode === "text");
+        modeImageBtn.classList.toggle("active", mode === "image");
+        errorBox.style.display = "none";
+      }
+      modeTextBtn.addEventListener("click", () => setMode("text"));
+      modeImageBtn.addEventListener("click", () => setMode("image"));
+
+      function setFile(file) {
+        if (!file || !file.type.startsWith("image/")) return;
+        selectedFile = file;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          imagePreview.src = e.target.result;
+          imagePreview.hidden = false;
+        };
+        reader.readAsDataURL(file);
+      }
+      imageFileInput.addEventListener("change", () => setFile(imageFileInput.files[0]));
+      dropZone.addEventListener("click", () => imageFileInput.click());
+      dropZone.addEventListener("dragover", (e) => e.preventDefault());
+      dropZone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        setFile(e.dataTransfer.files[0]);
+      });
+      document.addEventListener("paste", (e) => {
+        if (currentMode !== "image") return;
+        for (const item of e.clipboardData?.items || []) {
+          if (item.type.startsWith("image/")) {
+            setFile(item.getAsFile());
+            break;
+          }
+        }
+      });
 
       const esc = (s) =>
         String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -257,10 +363,15 @@ const year = new Date().getFullYear();
           matchesHtml = `<p class="empty">No encontramos una verificación previa para este contenido. Te recomendamos contrastarlo con fuentes oficiales (CNE, Ecuador Chequea, Primera Plana).</p>`;
         }
 
+        const ocrNote = data.ocr_text
+          ? `<div class="ocr-note">📖 <strong>Texto detectado:</strong> “${esc(data.ocr_text)}”</div>`
+          : "";
+
         results.innerHTML = `
           <div class="badge ${label.cls}">${label.icon} ${esc(label.text)}</div>
           ${chips(data.classification?.signals, "Señales detectadas:")}
           ${chips(data.classification?.themes, "Temas:")}
+          ${ocrNote}
           <h3 style="margin:4px 0 12px">📌 Verificaciones encontradas</h3>
           ${matchesHtml}`;
         results.classList.add("show");
@@ -269,9 +380,6 @@ const year = new Date().getFullYear();
 
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const text = textInput.value.trim();
-        if (!text) return;
-
         errorBox.style.display = "none";
         results.classList.remove("show");
         loading.style.display = "block";
@@ -279,18 +387,29 @@ const year = new Date().getFullYear();
         submitBtn.textContent = "Verificando…";
 
         try {
-          const res = await fetch(`${apiUrl}/verify`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+          let data;
+          if (currentMode === "image") {
+            if (!selectedFile) throw new Error("elige o pega una imagen primero");
+            const fd = new FormData();
+            fd.append("image", selectedFile);
+            const res = await fetch(`${apiUrl}/verify-image`, { method: "POST", body: fd });
+            data = await res.json();
+            if (!res.ok) throw new Error(data.detail || data.error || `Error ${res.status}`);
+          } else {
+            const text = textInput.value.trim();
+            if (!text) throw new Error("escribe un texto para verificar");
+            const res = await fetch(`${apiUrl}/verify`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text }),
+            });
+            data = await res.json();
+            if (!res.ok) throw new Error(data.detail || data.error || `Error ${res.status}`);
+          }
           render(data);
         } catch (err) {
           errorBox.textContent =
-            "No pudimos conectar con el servicio de verificación. Intenta de nuevo en un momento. (" +
-            err.message + ")";
+            "No pudimos completar la verificación. Intenta de nuevo. (" + err.message + ")";
           errorBox.style.display = "block";
         } finally {
           loading.style.display = "none";
