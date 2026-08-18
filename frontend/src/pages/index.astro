@@ -1,0 +1,294 @@
+---
+const apiUrl = import.meta.env.PUBLIC_API_URL || "http://localhost:8000";
+const year = new Date().getFullYear();
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="VerificaEcuador: contrasta noticias y afirmaciones sobre las elecciones de Ecuador con fuentes verificadas."
+    />
+    <title>VerificaEcuador — Verifica antes de compartir</title>
+    <style is:global>
+      :root {
+        --bg: #0b1220;
+        --card: #131c30;
+        --card-2: #1a2540;
+        --border: #26324d;
+        --text: #e8eefb;
+        --muted: #93a3c4;
+        --yellow: #ffd60a;
+        --blue: #3d6bff;
+        --red: #e5484d;
+        --green: #30a46c;
+        --amber: #f5a524;
+        --radius: 14px;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        line-height: 1.55;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      /* franja con los colores de la bandera */
+      .flag {
+        height: 6px;
+        display: flex;
+      }
+      .flag span { flex: 1; }
+      .flag .y { background: var(--yellow); }
+      .flag .b { background: var(--blue); }
+      .flag .r { background: var(--red); }
+
+      header, main, footer { width: 100%; max-width: 760px; margin: 0 auto; padding: 0 20px; }
+
+      header { padding-top: 28px; padding-bottom: 8px; }
+      .brand { display: flex; align-items: center; gap: 10px; }
+      .logo {
+        width: 38px; height: 38px; border-radius: 10px;
+        background: linear-gradient(135deg, var(--yellow), var(--blue));
+        display: grid; place-items: center;
+        font-weight: 800; font-size: 18px; color: #0b1220;
+      }
+      .brand h1 { font-size: 20px; margin: 0; letter-spacing: 0.2px; }
+      .brand small { color: var(--muted); font-size: 12px; display: block; }
+
+      main { flex: 1; padding-top: 26px; padding-bottom: 40px; }
+      .hero h2 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; }
+      .hero p { color: var(--muted); margin: 0 0 22px; }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 18px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 110px;
+        resize: vertical;
+        background: var(--card-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 14px;
+        font: inherit;
+        font-size: 15px;
+      }
+      textarea:focus { outline: 2px solid var(--blue); border-color: transparent; }
+
+      .btn {
+        margin-top: 12px;
+        width: 100%;
+        padding: 13px;
+        border: 0;
+        border-radius: 10px;
+        background: linear-gradient(135deg, var(--yellow), #ffb700);
+        color: #0b1220;
+        font: inherit;
+        font-weight: 700;
+        font-size: 16px;
+        cursor: pointer;
+      }
+      .btn:disabled { opacity: 0.6; cursor: wait; }
+      .btn:hover:not(:disabled) { filter: brightness(1.06); }
+
+      /* Resultados */
+      #results { margin-top: 22px; display: none; }
+      #results.show { display: block; animation: fade 0.25s ease; }
+      @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+
+      .badge {
+        display: inline-flex; align-items: center; gap: 8px;
+        font-size: 16px; font-weight: 700;
+        padding: 8px 14px; border-radius: 999px;
+        margin-bottom: 14px;
+      }
+      .badge.high { background: rgba(229, 72, 77, 0.15); color: #ff8a8d; border: 1px solid rgba(229,72,77,.4); }
+      .badge.medium { background: rgba(245, 165, 36, 0.15); color: #ffc46b; border: 1px solid rgba(245,165,36,.4); }
+      .badge.low { background: rgba(48, 164, 108, 0.15); color: #6fd3a3; border: 1px solid rgba(48,164,108,.4); }
+
+      .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 18px; }
+      .chip {
+        font-size: 13px; padding: 4px 10px; border-radius: 999px;
+        background: var(--card-2); border: 1px solid var(--border); color: var(--muted);
+      }
+
+      .match {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px 16px;
+        margin-bottom: 12px;
+      }
+      .match h3 { margin: 0 0 6px; font-size: 15.5px; line-height: 1.35; }
+      .match .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+      .verdict {
+        font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+        background: var(--card-2); border: 1px solid var(--border);
+      }
+      .source { font-size: 12.5px; color: var(--muted); }
+      .live-tag { font-size: 11px; color: var(--yellow); border: 1px solid var(--yellow); border-radius: 999px; padding: 2px 8px; }
+      .match a {
+        color: var(--blue); font-size: 13px; text-decoration: none;
+        word-break: break-all;
+      }
+      .match a:hover { text-decoration: underline; }
+      .match .explanation { color: var(--muted); font-size: 13.5px; margin-top: 8px; }
+
+      .empty { color: var(--muted); font-size: 14.5px; }
+      #error {
+        display: none; margin-top: 18px;
+        background: rgba(229,72,77,.12); border: 1px solid rgba(229,72,77,.4);
+        color: #ff9b9e; border-radius: var(--radius); padding: 12px 14px; font-size: 14px;
+      }
+      #loading { display: none; color: var(--muted); margin-top: 18px; font-size: 14.5px; }
+
+      footer {
+        color: var(--muted); font-size: 12.5px;
+        border-top: 1px solid var(--border);
+        padding-top: 16px; padding-bottom: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="flag" aria-hidden="true"><span class="y"></span><span class="b"></span><span class="r"></span></div>
+
+    <header>
+      <div class="brand">
+        <div class="logo">V</div>
+        <h1>VerificaEcuador<small>Elecciones 2026 · Contraste de desinformación</small></h1>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <h2>¿Te llegó una noticia dudosa?</h2>
+        <p>Pégala aquí y la contrastamos con verificaciones de fuentes confiables.</p>
+      </section>
+
+      <form id="verify-form" class="card">
+        <label for="text" style="font-size:13px;color:var(--muted)">Texto o afirmación a verificar</label>
+        <textarea
+          id="text"
+          name="text"
+          maxlength="2000"
+          placeholder="Ej: se anularon las elecciones de noviembre, es urgente reenviar"
+          required
+        ></textarea>
+        <button type="submit" class="btn" id="submit-btn">Verificar 🔎</button>
+      </form>
+
+      <div id="loading">⏳ Buscando en fuentes verificadas…</div>
+      <div id="error" role="alert"></div>
+
+      <section id="results" aria-live="polite"></section>
+    </main>
+
+    <footer>
+      <p>
+        VerificaEcuador no emite juicios: solo señala señales de riesgo y te remite a la fuente
+        original. Proyecto para MediaHack II (Openlab Ecuador + KAS), {year}.
+      </p>
+    </footer>
+
+    <script define:vars={{ apiUrl }}>
+      const form = document.getElementById("verify-form");
+      const textInput = document.getElementById("text");
+      const submitBtn = document.getElementById("submit-btn");
+      const loading = document.getElementById("loading");
+      const errorBox = document.getElementById("error");
+      const results = document.getElementById("results");
+
+      const esc = (s) =>
+        String(s ?? "").replace(/[&<>"']/g, (c) =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+        );
+
+      const LABELS = {
+        high: { text: "Alto riesgo de desinformación", cls: "high", icon: "🚨" },
+        medium: { text: "Riesgo moderado", cls: "medium", icon: "⚠️" },
+        low: { text: "Sin señales claras", cls: "low", icon: "✅" },
+      };
+
+      function chips(items, title) {
+        if (!items || items.length === 0) return "";
+        return `<div class="chips"><span class="chip">${esc(title)}</span>` +
+          items.map((s) => `<span class="chip">${esc(s)}</span>`).join("") +
+          `</div>`;
+      }
+
+      function render(data) {
+        const label = LABELS[data.classification?.risk] || LABELS.low;
+        const matches = data.matches || [];
+
+        let matchesHtml = "";
+        if (matches.length) {
+          matchesHtml = matches.map((m) => `
+            <div class="match">
+              <h3>${esc(m.claim)}</h3>
+              <div class="meta">
+                <span class="verdict">${esc(m.verdict)}</span>
+                <span class="source">${esc(m.source)}</span>
+                ${m.live ? '<span class="live-tag">en vivo</span>' : ""}
+              </div>
+              <a href="${esc(m.url)}" target="_blank" rel="noopener noreferrer">${esc(m.url)} ↗</a>
+              ${m.explanation ? `<div class="explanation">${esc(m.explanation)}</div>` : ""}
+            </div>`).join("");
+        } else {
+          matchesHtml = `<p class="empty">No encontramos una verificación previa para este contenido. Te recomendamos contrastarlo con fuentes oficiales (CNE, Ecuador Chequea, Primera Plana).</p>`;
+        }
+
+        results.innerHTML = `
+          <div class="badge ${label.cls}">${label.icon} ${esc(label.text)}</div>
+          ${chips(data.classification?.signals, "Señales detectadas:")}
+          ${chips(data.classification?.themes, "Temas:")}
+          <h3 style="margin:4px 0 12px">📌 Verificaciones encontradas</h3>
+          ${matchesHtml}`;
+        results.classList.add("show");
+        results.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const text = textInput.value.trim();
+        if (!text) return;
+
+        errorBox.style.display = "none";
+        results.classList.remove("show");
+        loading.style.display = "block";
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Verificando…";
+
+        try {
+          const res = await fetch(`${apiUrl}/verify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+          render(data);
+        } catch (err) {
+          errorBox.textContent =
+            "No pudimos conectar con el servicio de verificación. Intenta de nuevo en un momento. (" +
+            err.message + ")";
+          errorBox.style.display = "block";
+        } finally {
+          loading.style.display = "none";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Verificar 🔎";
+        }
+      });
+    </script>
+  </body>
+</html>

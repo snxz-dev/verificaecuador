@@ -1,0 +1,27 @@
+# Blueprint de Render para desplegar la API y el bot.
+# Importa este repo en https://render.com → "New" → "Blueprint".
+# Luego llena DATABASE_URL (Neon) y TELEGRAM_TOKEN en cada servicio (env vars).
+services:
+  - type: web
+    name: verificaecuador-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: TELEGRAM_TOKEN
+        sync: false
+
+  - type: worker
+    name: verificaecuador-bot
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.bot
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: TELEGRAM_TOKEN
+        sync: false

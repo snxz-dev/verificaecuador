@@ -8,6 +8,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from .config import TELEGRAM_TOKEN
 from .db import SessionLocal, search_fact_checks
 from .detector import classify
+from .sources import search_live_sources
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,10 @@ async def handle_message(update: Update, _ctx) -> None:
         matches = search_fact_checks(db, text)
     finally:
         db.close()
+
+    live = await search_live_sources(text)
+    seen = {m["url"] for m in matches}
+    matches += [m for m in live if m["url"] not in seen]
 
     response = format_response(classification, matches)
     await update.message.reply_text(response, parse_mode="Markdown")

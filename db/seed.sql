@@ -51,7 +51,7 @@ INSERT INTO fact_checks (claim, verdict, source, url, explanation, theme, keywor
     'Un candidato repartirá un bono de 500 dólares si gana',
     'FALSO',
     'Primera Plana / Fact-check',
-    'https://primerapalana.com',
+    'https://primeraplana.com.ec',
     'No existe una propuesta oficial registrada en el plan de gobierno del candidato que ofrezca ese bono. La cadena circula sin fuente oficial.',
     'bono',
     'bono candidato regalan pagaran'
